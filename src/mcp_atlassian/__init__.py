@@ -60,6 +60,19 @@ logging_stream = sys.stdout if is_env_truthy("MCP_LOGGING_STDOUT") else sys.stde
 
 # Set up logging using the utility function
 logger = setup_logging(logging_level, logging_stream)
+logger.warning(
+    "SSL trust configuration: system trust store injection is %s; "
+    "REQUESTS_CA_BUNDLE=%s; SSL_CERT_FILE=%s",
+    "enabled"
+    if os.getenv(
+        "MCP_ATLASSIAN_USE_SYSTEM_TRUSTSTORE",
+        dotenv_values().get("MCP_ATLASSIAN_USE_SYSTEM_TRUSTSTORE") or "true",
+    ).lower()
+    not in ("false", "0", "no")
+    else "disabled",
+    os.getenv("REQUESTS_CA_BUNDLE", "unset"),
+    os.getenv("SSL_CERT_FILE", "unset"),
+)
 
 
 async def _watch_parent_exit(stop_event: threading.Event) -> None:

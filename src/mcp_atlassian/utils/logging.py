@@ -7,11 +7,17 @@ output stream based on their level.
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import TextIO
+
+LOG_PATH = Path("~/.local/state/mcp-atlassian/mcp-atlassian.log").expanduser()
 
 
 def setup_logging(
-    level: int = logging.WARNING, stream: TextIO = sys.stderr
+    level: int = logging.WARNING,
+    stream: TextIO = sys.stderr,
+    log_path: Path = LOG_PATH,
 ) -> logging.Logger:
     """
     Configure MCP-Atlassian logging with level-based stream routing.
@@ -31,11 +37,23 @@ def setup_logging(
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # Add the level-dependent handler
-    handler = logging.StreamHandler(stream)
-    formatter = logging.Formatter("%(levelname)s - %(name)s - %(message)s")
-    handler.setFormatter(formatter)
-    root_logger.addHandler(handler)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    stream_handler = logging.StreamHandler(stream)
+    stream_handler.setFormatter(
+        logging.Formatter("%(levelname)s - %(name)s - %(message)s")
+    )
+    root_logger.addHandler(stream_handler)
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    file_handler = RotatingFileHandler(
+        log_path,
+        encoding="utf-8",
+        maxBytes=5_000_000,
+        backupCount=5,
+    )
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
 
     # Configure specific loggers
     loggers = ["mcp-atlassian", "mcp.server", "mcp.server.lowlevel.server", "mcp-jira"]
@@ -103,6 +121,7 @@ def log_config_param(
     service: str,
     param: str,
     value: str | None,
+    *,
     sensitive: bool = False,
 ) -> None:
     """Logs a configuration parameter, masking if sensitive.
