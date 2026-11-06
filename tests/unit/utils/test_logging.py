@@ -23,8 +23,7 @@ def test_setup_logging_default_level(tmp_path: Path):
     assert stream_handler.formatter._fmt == "%(levelname)s - %(name)s - %(message)s"
     assert isinstance(file_handler, logging.Handler)
     assert (
-        file_handler.formatter._fmt
-        == "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        file_handler.formatter._fmt == "%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
 
 
