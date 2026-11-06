@@ -510,3 +510,78 @@ class TestWorklogMixin:
         server_worklog_mixin.jira.resource_url.assert_called_with("issue")
         server_worklog_mixin._post_api3.assert_not_called()
         assert result["id"] == "10003"
+
+    def test_update_worklog_sends_only_given_fields(self, worklog_mixin):
+        """update_worklog PUTs only the fields that were given."""
+        worklog_mixin.jira.resource_url.return_value = (
+            "https://jira.example.com/rest/api/2/issue"
+        )
+        worklog_mixin.jira.put.return_value = {
+            "id": "10001",
+            "started": "2024-01-01T16:52:00.000+0000",
+            "timeSpent": "1h",
+            "timeSpentSeconds": 3600,
+            "author": {"displayName": "Test User"},
+        }
+
+        result = worklog_mixin.update_worklog(
+            "TEST-123", "10001", started="2024-01-01T16:52:00.000+0000"
+        )
+
+        worklog_mixin.jira.put.assert_called_once_with(
+            "https://jira.example.com/rest/api/2/issue/TEST-123/worklog/10001",
+            data={"started": "2024-01-01T16:52:00.000+0000"},
+        )
+        assert result["id"] == "10001"
+        assert result["time_spent_seconds"] == 3600
+
+    def test_update_worklog_converts_time_spent(self, worklog_mixin):
+        """time_spent is sent as seconds."""
+        worklog_mixin.jira.resource_url.return_value = (
+            "https://jira.example.com/rest/api/2/issue"
+        )
+        worklog_mixin.jira.put.return_value = {"id": "10001"}
+
+        worklog_mixin.update_worklog("TEST-123", "10001", time_spent="1h 30m")
+
+        assert worklog_mixin.jira.put.call_args.kwargs["data"] == {
+            "timeSpentSeconds": 5400
+        }
+
+    def test_update_worklog_requires_a_field(self, worklog_mixin):
+        """Calling update_worklog with nothing to change is an error."""
+        with pytest.raises(ValueError):
+            worklog_mixin.update_worklog("TEST-123", "10001")
+        worklog_mixin.jira.put.assert_not_called()
+
+    def test_update_worklog_wraps_errors(self, worklog_mixin):
+        """API errors are re-raised with context."""
+        worklog_mixin.jira.resource_url.return_value = (
+            "https://jira.example.com/rest/api/2/issue"
+        )
+        worklog_mixin.jira.put.side_effect = Exception("403 Forbidden")
+
+        with pytest.raises(Exception, match="Error updating worklog: 403 Forbidden"):
+            worklog_mixin.update_worklog("TEST-123", "10001", time_spent="1h")
+
+    def test_delete_worklog(self, worklog_mixin):
+        """delete_worklog issues DELETE on the worklog URL."""
+        worklog_mixin.jira.resource_url.return_value = (
+            "https://jira.example.com/rest/api/2/issue"
+        )
+
+        worklog_mixin.delete_worklog("TEST-123", "10001")
+
+        worklog_mixin.jira.delete.assert_called_once_with(
+            "https://jira.example.com/rest/api/2/issue/TEST-123/worklog/10001"
+        )
+
+    def test_delete_worklog_wraps_errors(self, worklog_mixin):
+        """API errors are re-raised with context."""
+        worklog_mixin.jira.resource_url.return_value = (
+            "https://jira.example.com/rest/api/2/issue"
+        )
+        worklog_mixin.jira.delete.side_effect = Exception("404 Not Found")
+
+        with pytest.raises(Exception, match="Error deleting worklog: 404 Not Found"):
+            worklog_mixin.delete_worklog("TEST-123", "10001")

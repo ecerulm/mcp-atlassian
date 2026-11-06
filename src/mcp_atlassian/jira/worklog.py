@@ -165,6 +165,97 @@ class WorklogMixin(JiraClient):
             logger.error(f"Error adding worklog to issue {issue_key}: {str(e)}")
             raise Exception(f"Error adding worklog: {str(e)}") from e
 
+    def update_worklog(
+        self,
+        issue_key: str,
+        worklog_id: str,
+        time_spent: str | None = None,
+        comment: str | None = None,
+        started: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Update an existing worklog entry; only the given fields change.
+
+        Args:
+            issue_key: The issue key (e.g. 'PROJ-123')
+            worklog_id: The ID of the worklog to update
+            time_spent: Optional new time spent (e.g. '1h 30m', '3h', '1d')
+            comment: Optional new comment (Markdown)
+            started: Optional new ISO8601 start date time
+
+        Returns:
+            The updated worklog in the same shape as add_worklog
+
+        Raises:
+            ValueError: If no field to update was given
+            Exception: If there's an error updating the worklog
+        """
+        if time_spent is None and comment is None and started is None:
+            raise ValueError("Give at least one of time_spent, comment or started")
+        try:
+            worklog_data: dict[str, Any] = {}
+            if time_spent is not None:
+                worklog_data["timeSpentSeconds"] = self._parse_time_spent(time_spent)
+            if comment is not None:
+                worklog_data["comment"] = self._markdown_to_jira(comment)
+            if started is not None:
+                worklog_data["started"] = started
+
+            if isinstance(worklog_data.get("comment"), dict) and self.config.is_cloud:
+                result = self._put_api3(
+                    f"issue/{issue_key}/worklog/{worklog_id}", data=worklog_data
+                )
+            else:
+                base_url = self.jira.resource_url("issue")
+                url = f"{base_url}/{issue_key}/worklog/{worklog_id}"
+                result = self.jira.put(url, data=worklog_data)
+            if not isinstance(result, dict):
+                msg = f"Unexpected return value type from `jira.put`: {type(result)}"
+                logger.error(msg)
+                raise TypeError(msg)
+
+            comment_raw = result.get("comment", "")
+            comment_text = (
+                adf_to_text(comment_raw)
+                if isinstance(comment_raw, dict)
+                else comment_raw
+            )
+            return {
+                "id": result.get("id"),
+                "comment": self._clean_text(comment_text or ""),
+                "created": str(parse_date(result.get("created", ""))),
+                "updated": str(parse_date(result.get("updated", ""))),
+                "started": str(parse_date(result.get("started", ""))),
+                "time_spent": result.get("timeSpent", ""),
+                "time_spent_seconds": result.get("timeSpentSeconds", 0),
+                "author": result.get("author", {}).get("displayName", "Unknown"),
+            }
+        except Exception as e:
+            logger.error(
+                f"Error updating worklog {worklog_id} on issue {issue_key}: {str(e)}"
+            )
+            raise Exception(f"Error updating worklog: {str(e)}") from e
+
+    def delete_worklog(self, issue_key: str, worklog_id: str) -> None:
+        """
+        Delete a worklog entry from a Jira issue.
+
+        Args:
+            issue_key: The issue key (e.g. 'PROJ-123')
+            worklog_id: The ID of the worklog to delete
+
+        Raises:
+            Exception: If there's an error deleting the worklog
+        """
+        try:
+            base_url = self.jira.resource_url("issue")
+            self.jira.delete(f"{base_url}/{issue_key}/worklog/{worklog_id}")
+        except Exception as e:
+            logger.error(
+                f"Error deleting worklog {worklog_id} on issue {issue_key}: {str(e)}"
+            )
+            raise Exception(f"Error deleting worklog: {str(e)}") from e
+
     def get_worklog(self, issue_key: str) -> dict[str, Any]:
         """
         Get the worklog data for an issue.

@@ -2793,6 +2793,120 @@ async def add_worklog(
 
 
 @jira_mcp.tool(
+    tags={"jira", "write", "toolset:jira_worklog"},
+    annotations={"title": "Update Worklog", "destructiveHint": True},
+)
+@check_write_access
+async def update_worklog(
+    ctx: Context,
+    issue_key: Annotated[
+        str,
+        Field(
+            description="Jira issue key (e.g., 'PROJ-123', 'ACV2-642')",
+            pattern=ISSUE_KEY_PATTERN,
+        ),
+    ],
+    worklog_id: Annotated[
+        str, Field(description="The ID of the worklog to update (see get_worklog)")
+    ],
+    time_spent: Annotated[
+        str | None,
+        Field(
+            description=(
+                "(Optional) New time spent in Jira format, e.g. '1h 30m', '1d', '4h'. "
+                "Unchanged when omitted."
+            )
+        ),
+    ] = None,
+    comment: Annotated[
+        str | None,
+        Field(
+            description=(
+                "(Optional) New comment in Markdown format. Unchanged when omitted."
+            )
+        ),
+    ] = None,
+    started: Annotated[
+        str | None,
+        Field(
+            description=(
+                "(Optional) New start time in ISO format, e.g. "
+                "'2023-08-01T12:00:00.000+0000'. Unchanged when omitted."
+            )
+        ),
+    ] = None,
+) -> str:
+    """Update an existing worklog entry; only the given fields change.
+
+    Args:
+        ctx: The FastMCP context.
+        issue_key: Jira issue key.
+        worklog_id: ID of the worklog to update.
+        time_spent: Optional new time spent.
+        comment: Optional new comment in Markdown.
+        started: Optional new start time in ISO format.
+
+    Returns:
+        JSON string representing the updated worklog object.
+
+    Raises:
+        ValueError: If in read-only mode, Jira client unavailable, or no field
+            to update was given.
+    """
+    jira = await get_jira_fetcher(ctx)
+    worklog_result = jira.update_worklog(
+        issue_key=issue_key,
+        worklog_id=worklog_id,
+        time_spent=time_spent,
+        comment=comment,
+        started=started,
+    )
+    result = {"message": "Worklog updated successfully", "worklog": worklog_result}
+    return json.dumps(result, indent=2, ensure_ascii=False)
+
+
+@jira_mcp.tool(
+    tags={"jira", "write", "toolset:jira_worklog"},
+    annotations={"title": "Delete Worklog", "destructiveHint": True},
+)
+@check_write_access
+async def delete_worklog(
+    ctx: Context,
+    issue_key: Annotated[
+        str,
+        Field(
+            description="Jira issue key (e.g., 'PROJ-123', 'ACV2-642')",
+            pattern=ISSUE_KEY_PATTERN,
+        ),
+    ],
+    worklog_id: Annotated[
+        str, Field(description="The ID of the worklog to delete (see get_worklog)")
+    ],
+) -> str:
+    """Delete a worklog entry from a Jira issue. This cannot be undone.
+
+    Args:
+        ctx: The FastMCP context.
+        issue_key: Jira issue key.
+        worklog_id: ID of the worklog to delete.
+
+    Returns:
+        JSON string confirming the deletion.
+
+    Raises:
+        ValueError: If in read-only mode or Jira client unavailable.
+    """
+    jira = await get_jira_fetcher(ctx)
+    jira.delete_worklog(issue_key=issue_key, worklog_id=worklog_id)
+    result = {
+        "message": "Worklog deleted successfully",
+        "issue_key": issue_key,
+        "worklog_id": worklog_id,
+    }
+    return json.dumps(result, indent=2, ensure_ascii=False)
+
+
+@jira_mcp.tool(
     tags={"jira", "write", "toolset:jira_links"},
     annotations={"title": "Link to Epic", "destructiveHint": True},
 )
